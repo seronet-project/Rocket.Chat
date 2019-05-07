@@ -4,6 +4,7 @@ applications:
   memory: 2G
   disk_quota: 2G
   path: bundle
+  timeout: 180
   command: "(cd programs/server && npm install) && node main.js"
   buildpacks:
   - nodejs_buildpack
