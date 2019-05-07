@@ -1,0 +1,12 @@
+---
+applications:
+- name: chat
+  memory: 1G
+  path: bundle
+  command: "node main.js"
+  buildpacks:
+  - nodejs_buildpack
+  routes:
+  - route: "chat.sero.network"
+  env:
+  - NODE_ENV: production
