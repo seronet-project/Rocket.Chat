@@ -9,4 +9,4 @@ applications:
   routes:
   - route: "chat.sero.network"
   env:
-  - NODE_ENV: production
+    NODE_ENV: production
