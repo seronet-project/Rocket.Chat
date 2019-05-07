@@ -9,4 +9,14 @@ applications:
   routes:
   - route: "chat.sero.network"
   env:
-    NODE_ENV: production
+    Organization_Type: community
+    Organization_Name: "Project SeRoNet"
+    Industry: industry
+    Size: 7
+    Country: germany
+    Website: "https://www.sero.network"
+    Server_Type: privateTeam
+    Allow_Marketing_Emails: false
+    Register_Server: false
+    Site_Url: "https://chat.sero.network"
+    Site_Name: "SeRoNet"
