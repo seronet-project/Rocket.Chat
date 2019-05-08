@@ -1,0 +1,90 @@
+resource_types:
+- name: slack-notification
+  type: docker-image
+  source:
+    repository: cfcommunity/slack-notification-resource
+
+resources:
+- name: rocket-chat-staging
+  type: cf
+  source:
+    api: {{cf-api}}
+    username: {{cf-username}}
+    password: {{cf-password}}
+    organization: {{cf-org}}
+    space: {{cf-space}}
+    skip_cert_check: false
+
+- name: rocket-chat-release
+  type: git
+  source:
+    uri: git@github.com:seronet-project/Rocket.Chat.git
+    branch: develop
+    depth: 5
+    disable_ci_skip: false
+    private_key: {{github-private-key}}
+
+- name: notify
+  type: slack-notification
+  source:
+    url: {{slack-webhook}}
+
+jobs:
+- name : deploy-rocket-chat
+  plan:
+    - get: rocket-chat-release
+      trigger: true
+    - task: rocket-chat-prebuild
+      config:
+        platform: linux
+        inputs:
+          - name: rocket-chat-release
+        outputs:
+          - name: rocket-chat-out
+          - name: rocket-chat-build
+        image_resource:
+          type: docker-image
+          source:
+            repository: node
+            tag: 8.15.1
+        run:
+          user: root
+          path: sh
+          args:
+          - -exc
+          - |
+            command -v meteor >/dev/null 2>&1 || curl https://install.meteor.com | sed s/--progress-bar/-sL/g | /bin/sh
+            # apt-get update && apt-get install -y build-essential nvi
+            node -v
+            export METEOR_ALLOW_SUPERUSER=true
+            meteor --version
+            cp -r rocket-chat-release/. rocket-chat-build
+            cd rocket-chat-build
+            cd packages/rocketchat-livechat/.app
+            npm install request
+            meteor npm install
+            cd -
+            meteor npm install
+            meteor npm run postinstall
+            set +e
+            meteor add rocketchat:lib
+            set -e
+            meteor build --server-only --directory ../rocket-chat-out
+            cp manifest.yml ../rocket-chat-out
+            cd ../rocket-chat-out
+            # cd bundle/programs/server
+            # npm install
+            # cd -
+            node -v > bundle/.nvmrc
+            # echo '{"name":"Rocket.Chat","engines": {"node": "8.15.1"}}' > bundle/package.json
+            ls bundle
+            chmod -R u+rw bundle
+    - put: rocket-chat-staging
+      params:
+        manifest: rocket-chat-out/manifest.yml
+        environment_variables:
+          ROOT_URL: https://chat.sero.network
+      on_success:
+        put: notify
+        params:
+          text: "Rocket Chat deployed."
