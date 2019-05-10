@@ -28,6 +28,7 @@
 .buildpath
 .classpath
 .clover
+.concourse/credentials.yml
 .cproject
 .DS_Store
 .elasticbeanstalk
