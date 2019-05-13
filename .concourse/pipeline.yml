@@ -7,6 +7,7 @@ resource_types:
 resources:
 - name: rocket-chat-staging
   type: cf
+  icon: cloud-upload
   source:
     api: {{cf-api}}
     username: {{cf-username}}
@@ -17,6 +18,7 @@ resources:
 
 - name: rocket-chat-release
   type: git
+  icon: github-face
   source:
     uri: git@github.com:seronet-project/Rocket.Chat.git
     branch: develop
@@ -26,6 +28,7 @@ resources:
 
 - name: notify
   type: slack-notification
+  icon: chat-alert
   source:
     url: {{slack-webhook}}
 
@@ -82,8 +85,7 @@ jobs:
     - put: rocket-chat-staging
       params:
         manifest: rocket-chat-out/manifest.yml
-        environment_variables:
-          ROOT_URL: https://chat.sero.network
+#        environment_variables:
       on_success:
         put: notify
         params:
