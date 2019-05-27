@@ -33,7 +33,7 @@ Meteor.methods({
 		}
 
 		if (!fs.existsSync(tempFolder)) {
-			fs.mkdirSync(tempFolder);
+			fs.mkdirSync(tempFolder, { recursive: true });
 		}
 
 		const subFolderName = fullExport ? 'full' : 'partial';
