@@ -32,9 +32,15 @@ const writeToFile = function(fileName, content) {
 };
 
 const createDir = function(folderName) {
-	if (!fs.existsSync(folderName)) {
-		fs.mkdirSync(folderName);
-	}
+	folderName
+	 .split(path.sep)
+	 .reduce((prevPath, folder) => {
+	   const currentPath = path.join(prevPath, folder, path.sep);
+	   if (!fs.existsSync(currentPath)){
+	     fs.mkdirSync(currentPath);
+	   }
+	   return currentPath;
+	 }, '');
 };
 
 const loadUserSubscriptions = function(exportOperation) {
