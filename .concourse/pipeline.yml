@@ -3,6 +3,7 @@ resource_types:
   type: docker-image
   source:
     repository: cfcommunity/slack-notification-resource
+    tag: v1.4.2
 
 resources:
 - name: rocket-chat-staging
@@ -81,6 +82,9 @@ jobs:
             node -v > bundle/.nvmrc
             # echo '{"name":"Rocket.Chat","engines": {"node": "8.15.1"}}' > bundle/package.json
             ls bundle
+            cd bundle/programs/server
+            npm install
+            cd -
             chmod -R u+rw bundle
     - put: rocket-chat-staging
       params:
