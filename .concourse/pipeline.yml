@@ -10,14 +10,14 @@ resources:
   type: cf
   icon: cloud-upload
   source:
-    api: {{cf-api}}
-    username: {{cf-username}}
-    password: {{cf-password}}
-    organization: {{cf-org}}
-    space: {{cf-space}}
+    api: ((cf.api))
+    username: ((cf.username))
+    password: ((cf.password))
+    organization: ((cf.org))
+    space: ((cf.space))
     skip_cert_check: false
 
-- name: rocket-chat-release
+- name: seronet-rocket-chat
   type: git
   icon: github-face
   source:
@@ -25,24 +25,75 @@ resources:
     branch: develop
     depth: 5
     disable_ci_skip: false
-    private_key: {{github-private-key}}
+    private_key: ((github-private-key))
+
+- name: rocket-chat-rocket-chat
+  type: git
+  icon: github-face
+  source:
+    uri: https://github.com/RocketChat/Rocket.Chat.git
+    branch: develop
+    depth: 30
 
 - name: notify
   type: slack-notification
   icon: chat-alert
   source:
-    url: {{slack-webhook}}
+    url: ((slack-webhook))
+
+- name: merge-timer
+  type: time
+  source:
+    start: 2:30 AM
+    stop: 3:30 AM
+    location: Europe/Berlin
 
 jobs:
-- name : deploy-rocket-chat
+- name: merge-rocket-chat
+  public: false
+  serial_groups: ["rocket-chat"]
   plan:
-    - get: rocket-chat-release
+  - get: merge-timer
+    trigger: true
+  - get: rocket-chat-rocket-chat
+#    trigger: true
+  - get: seronet-rocket-chat
+  - task: merge-rocket-chat-develop
+    config:
+      platform: linux
+      inputs:
+      - name: seronet-rocket-chat
+      outputs:
+      - name: seronet-rocket-chat
+      image_resource:
+        type: docker-image
+        source:
+          repository: cloudfoundry/cflinuxfs3
+      run:
+        path: bash
+        args:
+        - -exc
+        - |
+          cd seronet-rocket-chat
+          git config user.email "concourse@sero.network"
+          git config user.name "SeRoNet Concourse"
+          git remote add rocket.chat https://github.com/RocketChat/Rocket.Chat.git
+          git fetch rocket.chat develop
+          git merge --no-edit rocket.chat/develop
+  - put: seronet-rocket-chat
+    params:
+      repository: seronet-rocket-chat
+
+- name : deploy-rocket-chat
+  serial_groups: ["rocket-chat"]
+  plan:
+    - get: seronet-rocket-chat
       trigger: true
     - task: rocket-chat-prebuild
       config:
         platform: linux
         inputs:
-          - name: rocket-chat-release
+          - name: seronet-rocket-chat
         outputs:
           - name: rocket-chat-out
           - name: rocket-chat-build
@@ -62,7 +113,7 @@ jobs:
             node -v
             export METEOR_ALLOW_SUPERUSER=true
             meteor --version
-            cp -r rocket-chat-release/. rocket-chat-build
+            cp -r seronet-rocket-chat/. rocket-chat-build
             cd rocket-chat-build
             cd packages/rocketchat-livechat/.app
             npm install request

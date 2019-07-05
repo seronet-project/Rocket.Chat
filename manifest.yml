@@ -2,7 +2,7 @@
 applications:
 - name: chat
   memory: 2G
-  disk_quota: 2G
+  disk_quota: 1G
   path: bundle
   timeout: 180
   command: "node main.js"
