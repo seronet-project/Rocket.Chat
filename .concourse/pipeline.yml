@@ -115,10 +115,10 @@ jobs:
             meteor --version
             cp -r seronet-rocket-chat/. rocket-chat-build
             cd rocket-chat-build
-            cd packages/rocketchat-livechat/.app
-            npm install request
-            meteor npm install
-            cd -
+            #cd packages/rocketchat-livechat/.app
+            #npm install request
+            #meteor npm install
+            #cd -
             meteor npm install
             meteor npm run postinstall
             set +e
@@ -144,4 +144,8 @@ jobs:
       on_success:
         put: notify
         params:
-          text: "Rocket Chat deployed."
+          text: "Rocket Chat deployed to ((cf.space)) in ((cf.org))."
+      on_failure:
+        put: notify
+        params:
+          text: "Failed to deploy Rocket.Chat to ((cf.space)) in ((cf.org))."
