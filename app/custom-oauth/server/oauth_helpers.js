@@ -5,7 +5,7 @@ import { Roles } from '../../models';
 // Returns list of roles from SSO identity
 export function mapRolesFromSSO(identity, roleClaimName) {
 	let roles = [];
-	console.warn("identity: " + JSON.stringify(identity) + " roleClaim: " + roleClaimName);
+
 	if (identity && roleClaimName) {
 		// Adding roles
 		if (identity[roleClaimName] && Array.isArray(identity[roleClaimName])) {
