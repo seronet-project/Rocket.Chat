@@ -9,16 +9,16 @@ applications:
   buildpacks:
   - nodejs_buildpack
   routes:
-  - route: "chat.sero.network"
+  - route: "chat.robot.one"
   env:
     Organization_Type: community
     Organization_Name: "Project SeRoNet"
     Industry: industry
     Size: 7
     Country: germany
-    Website: "https://www.sero.network"
+    Website: "https://www.robot.one"
     Server_Type: privateTeam
     Allow_Marketing_Emails: false
     Register_Server: false
-    Site_Url: "https://chat.sero.network"
-    Site_Name: "SeRoNet"
+    Site_Url: "https://chat.robot.one"
+    Site_Name: "robot●one"
