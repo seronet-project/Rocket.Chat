@@ -7,7 +7,8 @@ applications:
   timeout: 180
   command: "node main.js"
   buildpacks:
-  - nodejs_buildpack
+  - https://github.com/cloudfoundry/nodejs-buildpack#develop
+  # - nodejs_buildpack
   routes:
   - route: "chat.robot.one"
   env:
