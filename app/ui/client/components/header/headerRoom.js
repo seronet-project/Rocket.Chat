@@ -14,6 +14,8 @@ import { emoji } from '../../../../emoji';
 import { Markdown } from '../../../../markdown/client';
 import { hasAllPermission } from '../../../../authorization';
 
+import './headerRoom.html';
+
 const getUserStatus = (id) => {
 	const roomData = Session.get(`roomData${ id }`);
 	return roomTypes.getUserStatus(roomData.t, id);
@@ -27,6 +29,7 @@ const getUserStatusText = (id) => {
 Template.headerRoom.helpers({
 	isDiscussion: () => Template.instance().state.get('discussion'),
 	isToggleFavoriteButtonVisible: () => Template.instance().state.get('favorite') !== null,
+	isToggleFavoriteButtonChecked: () => Template.instance().state.get('favorite'),
 	toggleFavoriteButtonIconLabel: () => (Template.instance().state.get('favorite') ? t('Unfavorite') : t('Favorite')),
 	toggleFavoriteButtonIcon: () => (Template.instance().state.get('favorite') ? 'star-filled' : 'star'),
 
@@ -145,12 +148,13 @@ Template.headerRoom.events({
 	'click .js-favorite'(event, instance) {
 		event.stopPropagation();
 		event.preventDefault();
+		event.currentTarget.blur();
 
 		return Meteor.call(
 			'toggleFavorite',
 			this._id,
 			!instance.state.get('favorite'),
-			(err) => err && handleError(err)
+			(err) => err && handleError(err),
 		);
 	},
 
@@ -166,7 +170,7 @@ Template.headerRoom.events({
 		if (hasAllPermission('edit-room', this._id)) {
 			call('saveRoomSettings', this._id, 'encrypted', !(room && room.encrypted)).then(() => {
 				toastr.success(
-					t('Encrypted_setting_changed_successfully')
+					t('Encrypted_setting_changed_successfully'),
 				);
 			});
 		}

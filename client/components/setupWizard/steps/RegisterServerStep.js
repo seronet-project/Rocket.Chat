@@ -1,31 +1,40 @@
-import { CheckBox, RadioButton } from '@rocket.chat/fuselage';
-import React, { useState } from 'react';
+import { CheckBox, Label, RadioButton } from '@rocket.chat/fuselage';
+import { useMergedRefs } from '@rocket.chat/fuselage-hooks';
+import React, { useRef, useState } from 'react';
 
-import { call } from '../../../../app/ui-utils/client';
-import { handleError } from '../../../../app/utils/client';
-import { useTranslation } from '../../../hooks/useTranslation';
+import { useMethod } from '../../../contexts/ServerContext';
+import { useBatchSettingsDispatch } from '../../../contexts/SettingsContext';
+import { useToastMessageDispatch } from '../../../contexts/ToastMessagesContext';
+import { useTranslation } from '../../../contexts/TranslationContext';
+import { useFocus } from '../../../hooks/useFocus';
 import { Icon } from '../../basic/Icon';
 import { Pager } from '../Pager';
-import { useSetupWizardParameters } from '../ParametersProvider';
+import { useSetupWizardContext } from '../SetupWizardState';
 import { Step } from '../Step';
 import { StepContent } from '../StepContent';
 import { StepHeader } from '../StepHeader';
-import { useSetupWizardStepsState } from '../StepsState';
-import { batchSetSettings } from '../functions';
-import { useFocus } from '../../../hooks/useFocus';
+import './RegisterServerStep.css';
 
-const Option = React.forwardRef(({ children, label, selected, disabled, ...props }, ref) =>
-	<label
+const Option = React.forwardRef(({ children, label, selected, disabled, ...props }, ref) => {
+	const innerRef = useRef();
+	const mergedRef = useMergedRefs(ref, innerRef);
+
+	return <span
 		className={[
 			'SetupWizard__RegisterServerStep-option',
 			selected && 'SetupWizard__RegisterServerStep-option--selected',
 			disabled && 'SetupWizard__RegisterServerStep-option--disabled',
 		].filter(Boolean).join(' ')}
+		onClick={() => {
+			innerRef.current.click();
+		}}
 	>
-		<RadioButton ref={ref} label={label} checked={selected} disabled={disabled} {...props} />
+		<Label text={label} position='end'>
+			<RadioButton ref={mergedRef} checked={selected} disabled={disabled} {...props} />
+		</Label>
 		{children}
-	</label>
-);
+	</span>;
+});
 
 const Items = (props) => <ul className='SetupWizard__RegisterServerStep-items' {...props} />;
 
@@ -35,18 +44,22 @@ const Item = ({ children, icon, ...props }) =>
 		{children}
 	</li>;
 
-export function RegisterServerStep({ step, title }) {
-	const { canDeclineServerRegistration } = useSetupWizardParameters();
-	const { currentStep, goToPreviousStep, goToFinalStep } = useSetupWizardStepsState();
-
-	const active = step === currentStep;
+export function RegisterServerStep({ step, title, active }) {
+	const { canDeclineServerRegistration, goToPreviousStep, goToFinalStep } = useSetupWizardContext();
 
 	const [registerServer, setRegisterServer] = useState(true);
 	const [optInMarketingEmails, setOptInMarketingEmails] = useState(true);
+	const [agreeTermsAndPrivacy, setAgreeTermsAndPrivacy] = useState(false);
 
 	const t = useTranslation();
 
 	const [commiting, setComitting] = useState(false);
+
+	const batchSetSettings = useBatchSettingsDispatch();
+
+	const registerCloudWorkspace = useMethod('cloud:registerWorkspace');
+
+	const dispatchToastMessage = useToastMessageDispatch();
 
 	const handleBackClick = () => {
 		goToPreviousStep();
@@ -58,6 +71,10 @@ export function RegisterServerStep({ step, title }) {
 		setComitting(true);
 
 		try {
+			if (registerServer && !agreeTermsAndPrivacy) {
+				throw new Object({ error: 'Register_Server_Terms_Alert' });
+			}
+
 			await batchSetSettings([
 				{
 					_id: 'Statistics_reporting',
@@ -75,17 +92,20 @@ export function RegisterServerStep({ step, title }) {
 					_id: 'Allow_Marketing_Emails',
 					value: optInMarketingEmails,
 				},
+				{
+					_id: 'Cloud_Service_Agree_PrivacyTerms',
+					value: agreeTermsAndPrivacy,
+				},
 			]);
 
 			if (registerServer) {
-				await call('cloud:registerWorkspace');
+				await registerCloudWorkspace();
 			}
 
 			setComitting(false);
 			goToFinalStep();
 		} catch (error) {
-			console.error(error);
-			handleError(error);
+			dispatchToastMessage({ type: 'error', message: error });
 			setComitting(false);
 		}
 	};
@@ -116,16 +136,17 @@ export function RegisterServerStep({ step, title }) {
 						<Item icon='check'>{t('Register_Server_Registered_OAuth')}</Item>
 						<Item icon='check'>{t('Register_Server_Registered_Marketplace')}</Item>
 					</Items>
-					<CheckBox
-						name='optInMarketingEmails'
-						value='true'
-						label={t('Register_Server_Opt_In')}
-						disabled={!registerServer}
-						checked={optInMarketingEmails}
-						onChange={({ currentTarget: { checked } }) => {
-							setOptInMarketingEmails(checked);
-						}}
-					/>
+					<Label text={t('Register_Server_Opt_In')} position='end' className='SetupWizard__RegisterServerStep__optIn'>
+						<CheckBox
+							name='optInMarketingEmails'
+							value='true'
+							disabled={!registerServer}
+							checked={optInMarketingEmails}
+							onChange={({ currentTarget: { checked } }) => {
+								setOptInMarketingEmails(checked);
+							}}
+						/>
+					</Label>
 				</Option>
 				<Option
 					label={t('Register_Server_Standalone')}
@@ -136,6 +157,7 @@ export function RegisterServerStep({ step, title }) {
 					onChange={({ currentTarget: { checked } }) => {
 						setRegisterServer(!checked);
 						setOptInMarketingEmails(!checked);
+						setAgreeTermsAndPrivacy(!checked);
 					}}
 				>
 					<Items>
@@ -144,6 +166,18 @@ export function RegisterServerStep({ step, title }) {
 						<Item icon='circle'>{t('Register_Server_Standalone_Own_Certificates')}</Item>
 					</Items>
 				</Option>
+
+				<Label text={<>{t('Register_Server_Registered_I_Agree')} <a href='https://rocket.chat/terms'>{t('Terms')}</a> & <a href='https://rocket.chat/privacy'>{t('Privacy_Policy')}</a></>} position='end' className='SetupWizard__RegisterServerStep__PrivacyTerms'>
+					<CheckBox
+						name='agreeTermsAndPrivacy'
+						data-qa-agree-terms
+						disabled={!registerServer}
+						checked={agreeTermsAndPrivacy}
+						onChange={({ currentTarget: { checked } }) => {
+							setAgreeTermsAndPrivacy(checked);
+						}}
+					/>
+				</Label>
 			</div>
 		</StepContent>
 

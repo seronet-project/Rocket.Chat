@@ -1,4 +1,5 @@
 import { Meteor } from 'meteor/meteor';
+import { Random } from 'meteor/random';
 import { DDPCommon } from 'meteor/ddp-common';
 import { DDP } from 'meteor/ddp';
 import { Accounts } from 'meteor/accounts-base';
@@ -312,6 +313,13 @@ export class APIClass extends Restivus {
 						route: `${ this.request.route }${ this.request.method.toLowerCase() }`,
 					};
 					let result;
+
+					const connection = {
+						id: Random.id(),
+						close() {},
+						token: this.token,
+					};
+
 					try {
 						api.enforceRateLimit(objectForRateLimitMatch, this.request, this.response);
 
@@ -321,7 +329,18 @@ export class APIClass extends Restivus {
 							});
 						}
 
-						result = originalAction.apply(this);
+						const invocation = new DDPCommon.MethodInvocation({
+							connection,
+							isSimulation: false,
+							userId: this.userId,
+						});
+
+						Accounts._accountData[connection.id] = {
+							connection,
+						};
+						Accounts._setAccountData(connection.id, 'loginToken', this.token);
+
+						result = DDP._CurrentInvocation.withValue(invocation, () => originalAction.apply(this));
 					} catch (e) {
 						logger.debug(`${ method } ${ route } threw an error:`, e.stack);
 
@@ -331,6 +350,8 @@ export class APIClass extends Restivus {
 						}[e.error] || 'failure';
 
 						result = API.v1[apiMethod](e.message, e.error);
+					} finally {
+						delete Accounts._accountData[connection.id];
 					}
 
 					result = result || API.v1.success();
@@ -545,6 +566,8 @@ const getUserAuth = function _getUserAuth(...args) {
 				token = Accounts._hashLoginToken(this.request.headers['x-auth-token']);
 			}
 
+			this.token = token;
+
 			return {
 				userId: this.request.headers['x-user-id'],
 				token,
@@ -577,37 +600,50 @@ const defaultOptionsEndpoint = function _defaultOptionsEndpoint() {
 	this.done();
 };
 
-const createApi = function _createApi(enableCors) {
-	if (!API.v1 || API.v1._config.enableCors !== enableCors) {
-		API.v1 = new APIClass({
-			version: 'v1',
-			apiPath: 'api/',
-			useDefaultAuth: true,
-			prettyJson: process.env.NODE_ENV === 'development',
-			enableCors,
-			defaultOptionsEndpoint,
-			auth: getUserAuth(),
-		});
+const createApi = function _createApi(_api, options = {}) {
+	_api = _api || new APIClass(Object.assign({
+		apiPath: 'api/',
+		useDefaultAuth: true,
+		prettyJson: process.env.NODE_ENV === 'development',
+		defaultOptionsEndpoint,
+		auth: getUserAuth(),
+	}, options));
+
+	delete _api._config.defaultHeaders['Access-Control-Allow-Origin'];
+	delete _api._config.defaultHeaders['Access-Control-Allow-Headers'];
+	delete _api._config.defaultHeaders.Vary;
+
+	if (settings.get('API_Enable_CORS')) {
+		const origin = settings.get('API_CORS_Origin');
+
+		if (origin) {
+			_api._config.defaultHeaders['Access-Control-Allow-Origin'] = origin;
+
+			if (origin !== '*') {
+				_api._config.defaultHeaders.Vary = 'Origin';
+			}
+		}
+
+		_api._config.defaultHeaders['Access-Control-Allow-Headers'] = 'Origin, X-Requested-With, Content-Type, Accept, X-User-Id, X-Auth-Token';
 	}
 
-	if (!API.default || API.default._config.enableCors !== enableCors) {
-		API.default = new APIClass({
-			apiPath: 'api/',
-			useDefaultAuth: true,
-			prettyJson: process.env.NODE_ENV === 'development',
-			enableCors,
-			defaultOptionsEndpoint,
-			auth: getUserAuth(),
-		});
-	}
+	return _api;
+};
+
+const createApis = function _createApis() {
+	API.v1 = createApi(API.v1, {
+		version: 'v1',
+	});
+
+	API.default = createApi(API.default);
 };
 
 // also create the API immediately
-createApi(!!settings.get('API_Enable_CORS'));
+createApis();
 
 // register the API to be re-created once the CORS-setting changes.
-settings.get('API_Enable_CORS', (key, value) => {
-	createApi(value);
+settings.get(/^(API_Enable_CORS|API_CORS_Origin)$/, () => {
+	createApis();
 });
 
 settings.get('Accounts_CustomFields', (key, value) => {
