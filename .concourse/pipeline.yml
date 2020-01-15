@@ -101,35 +101,25 @@ jobs:
           type: docker-image
           source:
             repository: node
-            tag: 8.16
+            tag: 8.17
         run:
           user: root
           path: sh
           args:
           - -exc
           - |
-            command -v meteor >/dev/null 2>&1 || curl https://install.meteor.com | sed s/--progress-bar/-sL/g | /bin/sh
-            # apt-get update && apt-get install -y build-essential nvi
+            command -v meteor >/dev/null 2>&1 || curl https://install.meteor.com?release=1.8 | sed s/--progress-bar/-sL/g | /bin/sh
+            # apt-get update && apt-get install -y build-essential
             node -v
             export METEOR_ALLOW_SUPERUSER=true
             meteor --version
             cp -r seronet-rocket-chat/. rocket-chat-build
             cd rocket-chat-build
-            #cd packages/rocketchat-livechat/.app
-            #npm install request
-            #meteor npm install
-            #cd -
             meteor npm install
             meteor npm run postinstall
-            set +e
-            meteor add rocketchat:lib
-            set -e
             meteor build --server-only --directory ../rocket-chat-out
             cp manifest.yml ../rocket-chat-out
             cd ../rocket-chat-out
-            # cd bundle/programs/server
-            # npm install
-            # cd -
             node -v > bundle/.nvmrc
             # echo '{"name":"Rocket.Chat","engines": {"node": "8.15.1"}}' > bundle/package.json
             ls bundle
