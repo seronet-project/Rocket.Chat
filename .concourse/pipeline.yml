@@ -101,14 +101,14 @@ jobs:
           type: docker-image
           source:
             repository: node
-            tag: 8.17
+            tag: 12.14
         run:
           user: root
           path: sh
           args:
           - -exc
           - |
-            command -v meteor >/dev/null 2>&1 || curl https://install.meteor.com?release=1.8 | sed s/--progress-bar/-sL/g | /bin/sh
+            command -v meteor >/dev/null 2>&1 || curl https://install.meteor.com | sed s/--progress-bar/-sL/g | /bin/sh
             # apt-get update && apt-get install -y build-essential
             node -v
             export METEOR_ALLOW_SUPERUSER=true
@@ -121,7 +121,6 @@ jobs:
             cp manifest.yml ../rocket-chat-out
             cd ../rocket-chat-out
             node -v > bundle/.nvmrc
-            # echo '{"name":"Rocket.Chat","engines": {"node": "8.15.1"}}' > bundle/package.json
             ls bundle
             cd bundle/programs/server
             npm install
