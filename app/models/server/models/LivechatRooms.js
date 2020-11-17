@@ -137,7 +137,7 @@ export class LivechatRooms extends Base {
 		return this.find(query, options);
 	}
 
-	findOneById(_id, fields) {
+	findOneById(_id, fields = {}) {
 		const options = {};
 
 		if (fields) {
@@ -646,6 +646,22 @@ export class LivechatRooms extends Base {
 		const update = {
 			$set: {
 				'metrics.visitorInactivity': visitorInactivity,
+			},
+		};
+
+		return this.update(query, update);
+	}
+
+	changeVisitorByRoomId(roomId, { _id, username, token }) {
+		const query = {
+			_id: roomId,
+			t: 'l',
+		};
+		const update = {
+			$set: {
+				'v._id': _id,
+				'v.username': username,
+				'v.token': token,
 			},
 		};
 

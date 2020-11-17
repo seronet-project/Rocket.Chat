@@ -116,7 +116,7 @@ jobs:
             cp -r seronet-rocket-chat/. rocket-chat-build
             cd rocket-chat-build
             meteor npm install
-            meteor npm run postinstall
+            # meteor npm run postinstall
             meteor build --server-only --directory ../rocket-chat-out
             cp manifest.yml ../rocket-chat-out
             cd ../rocket-chat-out

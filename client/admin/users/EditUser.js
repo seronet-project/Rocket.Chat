@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { Box, Field, Margins, Button } from '@rocket.chat/fuselage';
+import { Box, Field, Margins, Button, Callout } from '@rocket.chat/fuselage';
 
 import { useTranslation } from '../../contexts/TranslationContext';
 import { useEndpointDataExperimental, ENDPOINT_STATES } from '../../hooks/useEndpointDataExperimental';
@@ -21,7 +21,7 @@ export function EditUserWithData({ uid, ...props }) {
 	}
 
 	if (error || roleError) {
-		return <Box mbs='x16' {...props}>{t('User_not_found')}</Box>;
+		return <Callout m='x16' type='danger'>{t('User_not_found')}</Callout>;
 	}
 
 	return <EditUser data={data.user} roles={roleData.roles} {...props}/>;
@@ -60,14 +60,12 @@ export function EditUser({ data, roles, ...props }) {
 	const saveQuery = useMemo(() => ({
 		userId: data._id,
 		data: values,
-		// TODO: remove JSON.stringify. Is used to keep useEndpointAction from rerendering the page indefinitely.
-	}), [data._id, JSON.stringify(values)]);
+	}), [data._id, values]);
 
 	const saveAvatarQuery = useMemo(() => ({
 		userId: data._id,
 		avatarUrl: avatarObj && avatarObj.avatarUrl,
-		// TODO: remove JSON.stringify. Is used to keep useEndpointAction from rerendering the page indefinitely.
-	}), [data._id, JSON.stringify(avatarObj)]);
+	}), [data._id, avatarObj]);
 
 	const resetAvatarQuery = useMemo(() => ({
 		userId: data._id,

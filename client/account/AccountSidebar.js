@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { memo, useCallback, useEffect } from 'react';
 import { useSubscription } from 'use-subscription';
 
 import { menu, SideNav, Layout } from '../../app/ui-utils/client';
@@ -8,7 +8,7 @@ import Sidebar from '../components/basic/Sidebar';
 import SettingsProvider from '../providers/SettingsProvider';
 import { itemsSubscription } from './sidebarItems';
 
-export default React.memo(function AccountSidebar() {
+const AccountSidebar = () => {
 	const t = useTranslation();
 
 	const items = useSubscription(itemsSubscription);
@@ -22,14 +22,14 @@ export default React.memo(function AccountSidebar() {
 		SideNav.closeFlex();
 	}, []);
 
-	const currentRoute = useCurrentRoute();
-	const currentPath = useRoutePath(...currentRoute);
+	const [currentRouteName, ...rest] = useCurrentRoute();
+	const currentPath = useRoutePath(currentRouteName, ...rest);
 
 	useEffect(() => {
-		if (currentRoute[0] !== 'account') {
+		if (currentRouteName !== 'account') {
 			SideNav.closeFlex();
 		}
-	}, [currentRoute, currentPath]);
+	}, [currentRouteName]);
 
 	// TODO: uplift this provider
 	return <SettingsProvider privileged>
@@ -40,4 +40,6 @@ export default React.memo(function AccountSidebar() {
 			</Sidebar.Content>
 		</Sidebar>
 	</SettingsProvider>;
-});
+};
+
+export default memo(AccountSidebar);

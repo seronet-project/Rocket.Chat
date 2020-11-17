@@ -1,10 +1,13 @@
+import { HTML } from 'meteor/htmljs';
 import { Meteor } from 'meteor/meteor';
 
 import { hasPermission, hasRole } from '../../app/authorization/client';
 import { createTemplateForComponent } from '../reactAdapters';
-import { createSidebarItems } from '../components/basic/Sidebar';
+import { createSidebarItems } from '../lib/createSidebarItems';
 
-createTemplateForComponent('adminFlex', () => import('./sidebar/AdminSidebar'));
+createTemplateForComponent('adminFlex', () => import('./sidebar/AdminSidebar'), {
+	renderContainerView: () => HTML.DIV({ style: 'height: 100%; position: relative;' }), // eslint-disable-line new-cap
+});
 
 export const {
 	registerSidebarItem: registerAdminSidebarItem,
@@ -15,6 +18,7 @@ export const {
 		href: 'admin-info',
 		i18nLabel: 'Info',
 		icon: 'info-circled',
+		permissionGranted: () => hasPermission('view-statistics'),
 	}, {
 		href: 'admin-import',
 		i18nLabel: 'Import',

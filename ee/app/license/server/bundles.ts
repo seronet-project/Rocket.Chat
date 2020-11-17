@@ -8,8 +8,10 @@ const bundles: IBundle = {
 		'canned-responses',
 		'ldap-enterprise',
 		'livechat-enterprise',
+		'omnichannel-mobile-enterprise',
 		'engagement-dashboard',
 		'push-privacy',
+		'scalability',
 	],
 	pro: [
 	],

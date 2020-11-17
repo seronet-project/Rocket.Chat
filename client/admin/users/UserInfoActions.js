@@ -1,4 +1,4 @@
-import { Button, ButtonGroup, Icon, Menu, Modal, Option } from '@rocket.chat/fuselage';
+import { ButtonGroup, Menu, Option } from '@rocket.chat/fuselage';
 import React, { useCallback, useMemo } from 'react';
 
 import { useUserInfoActionsSpread } from '../../channel/hooks/useUserInfoActions';
@@ -11,46 +11,8 @@ import { useMethod, useEndpoint } from '../../contexts/ServerContext';
 import { useSetting } from '../../contexts/SettingsContext';
 import { useToastMessageDispatch } from '../../contexts/ToastMessagesContext';
 import { useTranslation } from '../../contexts/TranslationContext';
-
-const DeleteWarningModal = ({ onDelete, onCancel, erasureType, ...props }) => {
-	const t = useTranslation();
-
-	return <Modal {...props}>
-		<Modal.Header>
-			<Icon color='danger' name='modal-warning' size={20}/>
-			<Modal.Title>{t('Are_you_sure')}</Modal.Title>
-			<Modal.Close onClick={onCancel}/>
-		</Modal.Header>
-		<Modal.Content fontScale='p1'>
-			{t(`Delete_User_Warning_${ erasureType }`)}
-		</Modal.Content>
-		<Modal.Footer>
-			<ButtonGroup align='end'>
-				<Button ghost onClick={onCancel}>{t('Cancel')}</Button>
-				<Button primary danger onClick={onDelete}>{t('Delete')}</Button>
-			</ButtonGroup>
-		</Modal.Footer>
-	</Modal>;
-};
-
-const SuccessModal = ({ onClose, ...props }) => {
-	const t = useTranslation();
-	return <Modal {...props}>
-		<Modal.Header>
-			<Icon color='success' name='checkmark-circled' size={20}/>
-			<Modal.Title>{t('Deleted')}</Modal.Title>
-			<Modal.Close onClick={onClose}/>
-		</Modal.Header>
-		<Modal.Content fontScale='p1'>
-			{t('User_has_been_deleted')}
-		</Modal.Content>
-		<Modal.Footer>
-			<ButtonGroup align='end'>
-				<Button primary onClick={onClose}>{t('Ok')}</Button>
-			</ButtonGroup>
-		</Modal.Footer>
-	</Modal>;
-};
+import DeleteSuccessModal from '../../components/DeleteSuccessModal';
+import DeleteWarningModal from '../../components/DeleteWarningModal';
 
 export const UserInfoActions = ({ username, _id, isActive, isAdmin, onChange }) => {
 	const t = useTranslation();
@@ -63,8 +25,12 @@ export const UserInfoActions = ({ username, _id, isActive, isAdmin, onChange }) 
 	const canDirectMessage = usePermission('create-d');
 	const canEditOtherUserInfo = usePermission('edit-other-user-info');
 	const canAssignAdminRole = usePermission('assign-admin-role');
+	const canResetE2EEKey = usePermission('edit-other-user-e2ee');
+	const canResetTOTP = usePermission('edit-other-user-totp');
 	const canEditOtherUserActiveStatus = usePermission('edit-other-user-active-status');
 	const canDeleteUser = usePermission('delete-user');
+
+	const enforcePassword = useSetting('Accounts_TwoFactorAuthentication_Enforce_Password_Fallback');
 
 	const confirmOwnerChanges = (action, modalProps = {}) => async () => {
 		try {
@@ -100,7 +66,10 @@ export const UserInfoActions = ({ username, _id, isActive, isAdmin, onChange }) 
 
 		const result = await deleteUserEndpoint(deleteUserQuery);
 		if (result.success) {
-			setModal(<SuccessModal onClose={() => { setModal(); onChange(); }}/>);
+			setModal(<DeleteSuccessModal
+				children={t('User_has_been_deleted')}
+				onClose={() => { setModal(); onChange(); }}
+			/>);
 		} else {
 			setModal();
 		}
@@ -110,13 +79,17 @@ export const UserInfoActions = ({ username, _id, isActive, isAdmin, onChange }) 
 	});
 
 	const confirmDeleteUser = useCallback(() => {
-		setModal(<DeleteWarningModal onDelete={deleteUser} onCancel={() => setModal()} erasureType={erasureType}/>);
-	}, [deleteUser, erasureType, setModal]);
+		setModal(<DeleteWarningModal
+			children={t(`Delete_User_Warning_${ erasureType }`)}
+			onCancel={() => setModal()}
+			onDelete={deleteUser}
+		/>);
+	}, [deleteUser, erasureType, setModal, t]);
 
 	const setAdminStatus = useMethod('setAdminStatus');
-	const changeAdminStatus = useCallback(() => {
+	const changeAdminStatus = useCallback(async () => {
 		try {
-			setAdminStatus(_id, !isAdmin);
+			await setAdminStatus(_id, !isAdmin);
 			const message = isAdmin ? 'User_is_no_longer_an_admin' : 'User_is_now_an_admin';
 			dispatchToastMessage({ type: 'success', message: t(message) });
 			onChange();
@@ -124,6 +97,50 @@ export const UserInfoActions = ({ username, _id, isActive, isAdmin, onChange }) 
 			dispatchToastMessage({ type: 'error', message: error });
 		}
 	}, [_id, dispatchToastMessage, isAdmin, onChange, setAdminStatus, t]);
+
+	const resetE2EEKeyRequest = useEndpoint('POST', 'users.resetE2EKey');
+	const resetTOTPRequest = useEndpoint('POST', 'users.resetTOTP');
+	const resetE2EEKey = useCallback(async () => {
+		setModal();
+		const result = await resetE2EEKeyRequest({ userId: _id });
+
+		if (result) {
+			setModal(<DeleteSuccessModal
+				children={t('Users_key_has_been_reset')}
+				onClose={() => { setModal(); onChange(); }}
+			/>);
+		}
+	}, [resetE2EEKeyRequest, onChange, setModal, t, _id]);
+
+	const resetTOTP = useCallback(async () => {
+		setModal();
+		const result = await resetTOTPRequest({ userId: _id });
+
+		if (result) {
+			setModal(<DeleteSuccessModal
+				children={t('Users_TOTP_has_been_reset')}
+				onClose={() => { setModal(); onChange(); }}
+			/>);
+		}
+	}, [resetTOTPRequest, onChange, setModal, t, _id]);
+
+	const confirmResetE2EEKey = useCallback(() => {
+		setModal(<DeleteWarningModal
+			children={t('E2E_Reset_Other_Key_Warning')}
+			deleteText={t('Reset')}
+			onCancel={() => setModal()}
+			onDelete={resetE2EEKey}
+		/>);
+	}, [resetE2EEKey, t, setModal]);
+
+	const confirmResetTOTP = useCallback(() => {
+		setModal(<DeleteWarningModal
+			children={t('TOTP_Reset_Other_Key_Warning')}
+			deleteText={t('Reset')}
+			onCancel={() => setModal()}
+			onDelete={resetTOTP}
+		/>);
+	}, [resetTOTP, t, setModal]);
 
 	const activeStatusQuery = useMemo(() => ({
 		userId: _id,
@@ -170,10 +187,20 @@ export const UserInfoActions = ({ username, _id, isActive, isAdmin, onChange }) 
 			label: t('Edit'),
 			action: editUserClick,
 		} },
-		...canAssignAdminRole && { makeAdmin: {
+		...canAssignAdminRole && username && { makeAdmin: {
 			icon: 'key',
 			label: isAdmin ? t('Remove_Admin') : t('Make_Admin'),
 			action: changeAdminStatus,
+		} },
+		...canResetE2EEKey && enforcePassword && { resetE2EEKey: {
+			icon: 'key',
+			label: t('Reset_E2E_Key'),
+			action: confirmResetE2EEKey,
+		} },
+		...canResetTOTP && enforcePassword && { resetTOTP: {
+			icon: 'key',
+			label: t('Reset_TOTP'),
+			action: confirmResetTOTP,
 		} },
 		...canDeleteUser && { delete: {
 			icon: 'trash',
@@ -199,13 +226,38 @@ export const UserInfoActions = ({ username, _id, isActive, isAdmin, onChange }) 
 		canEditOtherUserActiveStatus,
 		isActive,
 		changeActiveStatus,
+		enforcePassword,
+		canResetE2EEKey,
+		canResetTOTP,
+		confirmResetE2EEKey,
+		confirmResetTOTP,
+		username,
 	]);
 
 	const { actions: actionsDefinition, menu: menuOptions } = useUserInfoActionsSpread(options);
 
-	const menu = menuOptions && <Menu mi='x4' placement='bottom-start' small={false} ghost={false} flexShrink={0} key='menu' renderItem={({ label: { label, icon }, ...props }) => <Option label={label} title={label} icon={icon} {...props}/>} options={menuOptions}/>;
+	const menu = useMemo(() => {
+		if (!menuOptions) {
+			return null;
+		}
 
-	const actions = useMemo(() => [...actionsDefinition.map(([key, { label, icon, action }]) => <UserInfo.Action key={key} title={label} label={label} onClick={action} icon={icon}/>), menu].filter(Boolean), [actionsDefinition, menu]);
+		return <Menu
+			mi='x4'
+			placement='bottom-start'
+			small={false}
+			ghost={false}
+			flexShrink={0}
+			key='menu'
+			renderItem={({ label: { label, icon }, ...props }) => <Option label={label} title={label} icon={icon} {...props}/>}
+			options={menuOptions}
+		/>;
+	}, [menuOptions]);
+
+	const actions = useMemo(() => {
+		const mapAction = ([key, { label, icon, action }]) =>
+			<UserInfo.Action key={key} title={label} label={label} onClick={action} icon={icon}/>;
+		return [...actionsDefinition.map(mapAction), menu].filter(Boolean);
+	}, [actionsDefinition, menu]);
 
 	return <ButtonGroup flexGrow={0} justifyContent='center'>
 		{actions}

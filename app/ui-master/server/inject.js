@@ -6,7 +6,7 @@ import _ from 'underscore';
 import s from 'underscore.string';
 
 import { Settings } from '../../models';
-import { settings } from '../../settings';
+import { settings } from '../../settings/server';
 
 const headInjections = new ReactiveDict();
 
@@ -41,7 +41,6 @@ Meteor.startup(() => {
 		<style>
 			body, body * {
 				animation: none !important;
-				transition: none !important;
 			}
 		</style>
 		<script>
@@ -157,9 +156,7 @@ renderDynamicCssList();
 // 	changed: renderDynamicCssList
 // });
 
-Settings.find({ _id: /theme-color-rc/i }, { fields: { value: 1 } }).observe({
-	changed: renderDynamicCssList,
-});
+settings.get(/theme-color-rc/i, () => renderDynamicCssList());
 
 injectIntoBody('icons', Assets.getText('public/icons.svg'));
 

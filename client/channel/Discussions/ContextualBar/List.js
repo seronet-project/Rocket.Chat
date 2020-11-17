@@ -2,7 +2,7 @@ import { Mongo } from 'meteor/mongo';
 import { Tracker } from 'meteor/tracker';
 import { FlowRouter } from 'meteor/kadira:flow-router';
 import s from 'underscore.string';
-import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef, memo } from 'react';
 import { Box, Icon, TextInput, Callout } from '@rocket.chat/fuselage';
 import { FixedSizeList as List } from 'react-window';
 import InfiniteLoader from 'react-window-infinite-loader';
@@ -13,8 +13,7 @@ import { getConfig } from '../../../../app/ui-utils/client/config';
 import { Messages } from '../../../../app/models/client';
 import VerticalBar from '../../../components/basic/VerticalBar';
 import { useTranslation } from '../../../contexts/TranslationContext';
-import RawText from '../../../components/basic/RawText';
-import { useUserId } from '../../../contexts/UserContext';
+import { useUserId, useUserSubscription } from '../../../contexts/UserContext';
 import { useEndpointDataExperimental, ENDPOINT_STATES } from '../../../hooks/useEndpointDataExperimental';
 import { useTimeAgo } from '../../../hooks/useTimeAgo';
 import { MessageSkeleton } from '../../components/Message';
@@ -22,7 +21,6 @@ import { useUserRoom } from '../../hooks/useUserRoom';
 import { useSetting } from '../../../contexts/SettingsContext';
 import DiscussionListMessage from './components/Message';
 import { clickableItem } from '../../helpers/clickableItem';
-import { useUserSubscription } from '../../../contexts/SubscriptionContext';
 
 function mapProps(WrappedComponent) {
 	return ({ msg, username, tcount, ts, ...props }) => <WrappedComponent replies={tcount} username={username} msg={msg} ts={ts} {...props}/>;
@@ -144,6 +142,39 @@ export const normalizeThreadMessage = ({ ...message }) => {
 	}
 };
 
+const Row = memo(function Row({
+	data,
+	index,
+	style,
+	showRealNames,
+	userId,
+	onClick,
+}) {
+	const t = useTranslation();
+	const formatDate = useTimeAgo();
+
+	if (!data[index]) {
+		return <Skeleton style={style}/>;
+	}
+	const discussion = data[index];
+	const msg = normalizeThreadMessage(discussion);
+
+	const { name = discussion.u.username } = discussion.u;
+
+	return <Discussion
+		{ ...discussion }
+		name={showRealNames ? name : discussion.u.username }
+		username={ discussion.u.username }
+		style={style}
+		following={discussion.replies && discussion.replies.includes(userId)}
+		data-drid={discussion.drid}
+		msg={msg}
+		t={t}
+		formatDate={formatDate}
+		onClick={onClick}
+	/>;
+});
+
 export function DiscussionList({ total = 10, discussions = [], loadMoreItems, loading, onClose, error, userId, text, setText }) {
 	const showRealNames = useSetting('UI_Use_Real_Name');
 	const discussionsRef = useRef();
@@ -155,32 +186,16 @@ export function DiscussionList({ total = 10, discussions = [], loadMoreItems, lo
 		FlowRouter.goToRoomById(drid);
 	}, []);
 
-	const formatDate = useTimeAgo();
-
 	discussionsRef.current = discussions;
 
-	const rowRenderer = useCallback(React.memo(function rowRenderer({ data, index, style }) {
-		if (!data[index]) {
-			return <Skeleton style={style}/>;
-		}
-		const discussion = data[index];
-		const msg = normalizeThreadMessage(discussion);
-
-		const { name = discussion.u.username } = discussion.u;
-
-		return <Discussion
-			{ ...discussion }
-			name={showRealNames ? name : discussion.u.username }
-			username={ discussion.u.username }
-			style={style}
-			following={discussion.replies && discussion.replies.includes(userId)}
-			data-drid={discussion.drid}
-			msg={msg}
-			t={t}
-			formatDate={formatDate}
-			onClick={onClick}
-		/>;
-	}), [showRealNames]);
+	const rowRenderer = useCallback(({ data, index, style }) => <Row
+		data={data}
+		index={index}
+		style={style}
+		showRealNames={showRealNames}
+		userId={userId}
+		onClick={onClick}
+	/>, [onClick, showRealNames, userId]);
 
 	const isItemLoaded = useCallback((index) => index < discussionsRef.current.length, []);
 	const { ref, contentBoxSize: { inlineSize = 378, blockSize = 750 } = {} } = useResizeObserver();
@@ -188,7 +203,7 @@ export function DiscussionList({ total = 10, discussions = [], loadMoreItems, lo
 	return <VerticalBar>
 		<VerticalBar.Header>
 			<VerticalBar.Icon name='discussion'/>
-			<Box flexShrink={1} flexGrow={1} withTruncatedText mi='x8'><RawText>{t('Discussions')}</RawText></Box>
+			<Box flexShrink={1} flexGrow={1} withTruncatedText mi='x8'>{t('Discussions')}</Box>
 			<VerticalBar.Close onClick={onClose}/>
 		</VerticalBar.Header>
 		<VerticalBar.Content paddingInline={0}>

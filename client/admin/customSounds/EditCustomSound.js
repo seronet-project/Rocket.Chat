@@ -4,57 +4,18 @@ import { Box, Button, ButtonGroup, Margins, TextInput, Field, Icon, Skeleton, Th
 import { useTranslation } from '../../contexts/TranslationContext';
 import { useMethod } from '../../contexts/ServerContext';
 import { useToastMessageDispatch } from '../../contexts/ToastMessagesContext';
-import { Modal } from '../../components/basic/Modal';
 import { useFileInput } from '../../hooks/useFileInput';
 import { useEndpointDataExperimental, ENDPOINT_STATES } from '../../hooks/useEndpointDataExperimental';
 import { validate, createSoundData } from './lib';
+import { useSetModal } from '../../contexts/ModalContext';
 import VerticalBar from '../../components/basic/VerticalBar';
+import DeleteSuccessModal from '../../components/DeleteSuccessModal';
+import DeleteWarningModal from '../../components/DeleteWarningModal';
 
-const DeleteWarningModal = ({ onDelete, onCancel, ...props }) => {
-	const t = useTranslation();
-	return <Modal {...props}>
-		<Modal.Header>
-			<Icon color='danger' name='modal-warning' size={20}/>
-			<Modal.Title>{t('Are_you_sure')}</Modal.Title>
-			<Modal.Close onClick={onCancel}/>
-		</Modal.Header>
-		<Modal.Content fontScale='p1'>
-			{t('Custom_Sound_Delete_Warning')}
-		</Modal.Content>
-		<Modal.Footer>
-			<ButtonGroup align='end'>
-				<Button ghost onClick={onCancel}>{t('Cancel')}</Button>
-				<Button primary danger onClick={onDelete}>{t('Delete')}</Button>
-			</ButtonGroup>
-		</Modal.Footer>
-	</Modal>;
-};
+function EditCustomSound({ _id, onChange, ...props }) {
+	const query = useMemo(() => ({ query: JSON.stringify({ _id }) }), [_id]);
 
-const SuccessModal = ({ onClose, ...props }) => {
-	const t = useTranslation();
-	return <Modal {...props}>
-		<Modal.Header>
-			<Icon color='success' name='checkmark-circled' size={20}/>
-			<Modal.Title>{t('Deleted')}</Modal.Title>
-			<Modal.Close onClick={onClose}/>
-		</Modal.Header>
-		<Modal.Content fontScale='p1'>
-			{t('Custom_Sound_Has_Been_Deleted')}
-		</Modal.Content>
-		<Modal.Footer>
-			<ButtonGroup align='end'>
-				<Button primary onClick={onClose}>{t('Ok')}</Button>
-			</ButtonGroup>
-		</Modal.Footer>
-	</Modal>;
-};
-
-export function EditCustomSound({ _id, cache, ...props }) {
-	const query = useMemo(() => ({
-		query: JSON.stringify({ _id }),
-	}), [_id]);
-
-	const { data, state, error } = useEndpointDataExperimental('custom-sounds.list', query);
+	const { data, state, error, reload } = useEndpointDataExperimental('custom-sounds.list', query);
 
 	if (state === ENDPOINT_STATES.LOADING) {
 		return <Box pb='x20'>
@@ -76,19 +37,24 @@ export function EditCustomSound({ _id, cache, ...props }) {
 		return <Box fontScale='h1' pb='x20'>{error}</Box>;
 	}
 
-	return <EditSound data={data.sounds[0]} {...props}/>;
+	const handleChange = () => {
+		onChange && onChange();
+		reload && reload();
+	};
+
+	return <EditSound data={data.sounds[0]} onChange={handleChange} {...props}/>;
 }
 
 function EditSound({ close, onChange, data, ...props }) {
 	const t = useTranslation();
 	const dispatchToastMessage = useToastMessageDispatch();
+	const setModal = useSetModal();
 
 	const { _id, name: previousName } = data || {};
-	const previousSound = data || {};
+	const previousSound = useMemo(() => data || {}, [data]);
 
-	const [name, setName] = useState('');
-	const [sound, setSound] = useState();
-	const [modal, setModal] = useState();
+	const [name, setName] = useState(() => data?.name ?? '');
+	const [sound, setSound] = useState(() => data ?? {});
 
 	useEffect(() => {
 		setName(previousName || '');
@@ -143,55 +109,75 @@ function EditSound({ close, onChange, data, ...props }) {
 		onChange();
 	}, [saveAction, sound, onChange]);
 
-	const onDeleteConfirm = useCallback(async () => {
-		try {
-			await deleteCustomSound(_id);
-			setModal(() => <SuccessModal onClose={() => { setModal(undefined); close(); onChange(); }}/>);
-		} catch (error) {
-			dispatchToastMessage({ type: 'error', message: error });
+	const handleDeleteButtonClick = useCallback(() => {
+		const handleClose = () => {
+			setModal(null);
+			close();
 			onChange();
-		}
-	}, [_id, close, deleteCustomSound, dispatchToastMessage, onChange]);
+		};
 
-	const openConfirmDelete = () => setModal(() => <DeleteWarningModal onDelete={onDeleteConfirm} onCancel={() => setModal(undefined)}/>);
+		const handleDelete = async () => {
+			try {
+				await deleteCustomSound(_id);
+				setModal(() => <DeleteSuccessModal
+					children={t('Custom_Sound_Has_Been_Deleted')}
+					onClose={handleClose}
+				/>);
+			} catch (error) {
+				dispatchToastMessage({ type: 'error', message: error });
+				onChange();
+			}
+		};
 
-	const clickUpload = useFileInput(handleChangeFile, 'audio/mp3');
+		const handleCancel = () => {
+			setModal(null);
+		};
 
-	return <>
-		<VerticalBar.ScrollableContent {...props}>
-			<Field>
-				<Field.Label>{t('Name')}</Field.Label>
-				<Field.Row>
-					<TextInput value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder={t('Name')} />
-				</Field.Row>
-			</Field>
+		setModal(() => <DeleteWarningModal
+			children={t('Custom_Sound_Delete_Warning')}
+			onDelete={handleDelete}
+			onCancel={handleCancel}
+		/>);
+	}, [_id, close, deleteCustomSound, dispatchToastMessage, onChange, setModal, t]);
 
-			<Field>
-				<Field.Label alignSelf='stretch'>{t('Sound_File_mp3')}</Field.Label>
-				<Box display='flex' flexDirection='row' mbs='none'>
-					<Margins inline='x4'>
-						<Button square onClick={clickUpload}><Icon name='upload' size='x20'/></Button>
-						{(sound && sound.name) || 'none'}
-					</Margins>
-				</Box>
-			</Field>
+	const [clickUpload] = useFileInput(handleChangeFile, 'audio/mp3');
 
-			<Field>
-				<Field.Row>
-					<ButtonGroup stretch w='full'>
-						<Button onClick={close}>{t('Cancel')}</Button>
-						<Button primary onClick={handleSave} disabled={!hasUnsavedChanges}>{t('Save')}</Button>
-					</ButtonGroup>
-				</Field.Row>
-			</Field>
-			<Field>
-				<Field.Row>
-					<ButtonGroup stretch w='full'>
-						<Button primary danger onClick={openConfirmDelete}><Icon name='trash' mie='x4'/>{t('Delete')}</Button>
-					</ButtonGroup>
-				</Field.Row>
-			</Field>
-		</VerticalBar.ScrollableContent>
-		{ modal }
-	</>;
+	return <VerticalBar.ScrollableContent {...props}>
+		<Field>
+			<Field.Label>{t('Name')}</Field.Label>
+			<Field.Row>
+				<TextInput value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder={t('Name')} />
+			</Field.Row>
+		</Field>
+
+		<Field>
+			<Field.Label alignSelf='stretch'>{t('Sound_File_mp3')}</Field.Label>
+			<Box display='flex' flexDirection='row' mbs='none'>
+				<Margins inline='x4'>
+					<Button square onClick={clickUpload}><Icon name='upload' size='x20'/></Button>
+					{(sound && sound.name) || 'none'}
+				</Margins>
+			</Box>
+		</Field>
+
+		<Field>
+			<Field.Row>
+				<ButtonGroup stretch w='full'>
+					<Button onClick={close}>{t('Cancel')}</Button>
+					<Button primary onClick={handleSave} disabled={!hasUnsavedChanges}>{t('Save')}</Button>
+				</ButtonGroup>
+			</Field.Row>
+		</Field>
+		<Field>
+			<Field.Row>
+				<ButtonGroup stretch w='full'>
+					<Button primary danger onClick={handleDeleteButtonClick}>
+						<Icon name='trash' mie='x4'/>{t('Delete')}
+					</Button>
+				</ButtonGroup>
+			</Field.Row>
+		</Field>
+	</VerticalBar.ScrollableContent>;
 }
+
+export default EditCustomSound;
