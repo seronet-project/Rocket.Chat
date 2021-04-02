@@ -1,22 +1,38 @@
 import { Db, FindOneOptions } from 'mongodb';
 
-import { TeamRaw } from '../../../app/models/server/raw/Team';
-import { ITeam, ITeamMember, TEAM_TYPE, IRecordsWithTotal, IPaginationOptions, IQueryOptions, ITeamStats } from '../../../definition/ITeam';
-import { Room } from '../../sdk';
-import { ITeamCreateParams, ITeamInfo, ITeamMemberInfo, ITeamMemberParams, ITeamService } from '../../sdk/types/ITeamService';
-import { IUser } from '../../../definition/IUser';
-import { ServiceClass } from '../../sdk/types/ServiceClass';
-import { UsersRaw } from '../../../app/models/server/raw/Users';
+import { checkUsernameAvailability } from '../../../app/lib/server/functions';
+import { addUserToRoom } from '../../../app/lib/server/functions/addUserToRoom';
+import { getSubscribedRoomsForUserWithDetails } from '../../../app/lib/server/functions/getRoomsWithSingleOwner';
+import { Subscriptions } from '../../../app/models/server';
+import { MessagesRaw } from '../../../app/models/server/raw/Messages';
 import { RoomsRaw } from '../../../app/models/server/raw/Rooms';
 import { SubscriptionsRaw } from '../../../app/models/server/raw/Subscriptions';
-import { Subscriptions } from '../../../app/models/server';
+import { TeamRaw } from '../../../app/models/server/raw/Team';
 import { TeamMemberRaw } from '../../../app/models/server/raw/TeamMember';
-import { MessagesRaw } from '../../../app/models/server/raw/Messages';
+import { UsersRaw } from '../../../app/models/server/raw/Users';
 import { IRoom } from '../../../definition/IRoom';
-import { addUserToRoom } from '../../../app/lib/server/functions/addUserToRoom';
-import { canAccessRoom } from '../authorization/canAccessRoom';
+import {
+	IPaginationOptions,
+	IQueryOptions,
+	IRecordsWithTotal,
+	ITeam,
+	ITeamMember,
+	ITeamStats,
+	TEAM_TYPE,
+} from '../../../definition/ITeam';
+import { IUser } from '../../../definition/IUser';
 import { escapeRegExp } from '../../../lib/escapeRegExp';
-import { checkUsernameAvailability } from '../../../app/lib/server/functions';
+import { Room } from '../../sdk';
+import {
+	IListRoomsFilter,
+	ITeamCreateParams,
+	ITeamInfo,
+	ITeamMemberInfo,
+	ITeamMemberParams,
+	ITeamService,
+} from '../../sdk/types/ITeamService';
+import { ServiceClass } from '../../sdk/types/ServiceClass';
+import { canAccessRoom } from '../authorization/canAccessRoom';
 
 export class TeamService extends ServiceClass implements ITeamService {
 	protected name = 'team';
@@ -242,41 +258,6 @@ export class TeamService extends ServiceClass implements ITeamService {
 		return this.TeamModel.findByIds(ids, options).toArray();
 	}
 
-	async addRoom(uid: string, rid: string, teamId: string, isDefault = false): Promise<IRoom> {
-		if (!teamId) {
-			throw new Error('missing-teamId');
-		}
-		if (!rid) {
-			throw new Error('missing-roomId');
-		}
-		if (!uid) {
-			throw new Error('missing-userId');
-		}
-		// at this point, we already checked for the permission
-		// so we just need to check if the user can see the room
-		const room = await this.RoomsModel.findOneById(rid);
-		const user = await this.Users.findOneById(uid);
-		const canSeeRoom = await canAccessRoom(room, user);
-		if (!canSeeRoom) {
-			throw new Error('invalid-room');
-		}
-
-		const team = await this.TeamModel.findOneById(teamId, { projection: { _id: 1 } });
-		if (!team) {
-			throw new Error('invalid-team');
-		}
-		if (room.teamId) {
-			throw new Error('room-already-on-team');
-		}
-
-		room.teamId = teamId;
-		room.teamDefault = !!isDefault;
-		this.RoomsModel.setTeamById(room._id, teamId, isDefault);
-		return {
-			...room,
-		};
-	}
-
 	async addRooms(uid: string, rooms: Array<string>, teamId: string): Promise<Array<IRoom>> {
 		if (!teamId) {
 			throw new Error('missing-teamId');
@@ -402,7 +383,7 @@ export class TeamService extends ServiceClass implements ITeamService {
 		};
 	}
 
-	async listRooms(uid: string, teamId: string, getAllRooms: boolean, allowPrivateTeam: boolean, { offset: skip, count: limit }: IPaginationOptions = { offset: 0, count: 50 }, { query }: IQueryOptions<IRoom>): Promise<IRecordsWithTotal<IRoom>> {
+	async listRooms(uid: string, teamId: string, filter: IListRoomsFilter, { offset: skip, count: limit }: IPaginationOptions = { offset: 0, count: 50 }): Promise<IRecordsWithTotal<IRoom>> {
 		if (!teamId) {
 			throw new Error('missing-teamId');
 		}
@@ -410,18 +391,22 @@ export class TeamService extends ServiceClass implements ITeamService {
 		if (!team) {
 			throw new Error('invalid-team');
 		}
+
+		const { getAllRooms, allowPrivateTeam, name, isDefault } = filter;
+
 		const isMember = await this.TeamMembersModel.findOneByUserIdAndTeamId(uid, teamId);
 		if (team.type === TEAM_TYPE.PRIVATE && !allowPrivateTeam && !isMember) {
 			throw new Error('user-not-on-private-team');
 		}
+
 		if (getAllRooms) {
-			const teamRoomsCursor = this.RoomsModel.findByTeamId(teamId, { skip, limit }, query);
+			const teamRoomsCursor = this.RoomsModel.findByTeamIdContainingNameAndDefault(teamId, name, isDefault, { skip, limit });
 			return {
 				total: await teamRoomsCursor.count(),
 				records: await teamRoomsCursor.toArray(),
 			};
 		}
-		const teamRooms = await this.RoomsModel.findByTeamId(teamId, { skip, limit, projection: { _id: 1, t: 1 } }, query).toArray();
+		const teamRooms = await this.RoomsModel.findByTeamIdContainingNameAndDefault(teamId, name, isDefault, { skip, limit, projection: { _id: 1, t: 1 } }).toArray();
 		const privateTeamRoomIds = teamRooms.filter((room) => room.t === 'p').map((room) => room._id);
 		const publicTeamRoomIds = teamRooms.filter((room) => room.t === 'c').map((room) => room._id);
 
@@ -453,9 +438,19 @@ export class TeamService extends ServiceClass implements ITeamService {
 		const subscriptionsCursor = this.SubscriptionsModel.findByUserIdAndRoomIds(userId, teamRoomIds);
 		const subscriptionRoomIds = (await subscriptionsCursor.toArray()).map((subscription) => subscription.rid);
 		const availableRoomsCursor = this.RoomsModel.findManyByRoomIds(subscriptionRoomIds, { skip, limit });
+		const rooms = await availableRoomsCursor.toArray();
+		const roomData = getSubscribedRoomsForUserWithDetails(userId, false, teamRoomIds);
+		const records = [];
+
+		for (const room of rooms) {
+			const roomInfo = roomData.find((data) => data.rid === room._id);
+			room.isLastOwner = roomInfo.userIsLastOwner;
+			records.push(room);
+		}
+
 		return {
 			total: await availableRoomsCursor.count(),
-			records: await availableRoomsCursor.toArray(),
+			records,
 		};
 	}
 
@@ -523,8 +518,8 @@ export class TeamService extends ServiceClass implements ITeamService {
 
 		const membersList: Array<Omit<ITeamMember, '_id'>> = members?.map((member) => ({
 			teamId,
-			userId: member.userId ? member.userId : '',
-			roles: member.roles ? member.roles : [],
+			userId: member.userId,
+			roles: member.roles || [],
 			createdAt: new Date(),
 			createdBy,
 			_updatedAt: new Date(), // TODO how to avoid having to do this?
@@ -536,10 +531,7 @@ export class TeamService extends ServiceClass implements ITeamService {
 
 	async updateMember(teamId: string, member: ITeamMemberParams): Promise<void> {
 		if (!member.userId) {
-			member.userId = await this.Users.findOneByUsername(member.userName);
-			if (!member.userId) {
-				throw new Error('invalid-user');
-			}
+			throw new Error('invalid-user');
 		}
 
 		const memberUpdate: Partial<ITeamMember> = {
@@ -554,7 +546,7 @@ export class TeamService extends ServiceClass implements ITeamService {
 		await this.TeamMembersModel.deleteByUserIdAndTeamId(userId, teamId);
 	}
 
-	async removeMembers(teamId: string, members: Array<ITeamMemberParams>): Promise<void> {
+	async removeMembers(teamId: string, members: Array<ITeamMemberParams>): Promise<boolean> {
 		const team = await this.TeamModel.findOneById(teamId, { projection: { _id: 1, roomId: 1 } });
 		if (!team) {
 			throw new Error('team-does-not-exist');
@@ -562,10 +554,7 @@ export class TeamService extends ServiceClass implements ITeamService {
 
 		for await (const member of members) {
 			if (!member.userId) {
-				member.userId = await this.Users.findOneByUsername(member.userName);
-				if (!member.userId) {
-					throw new Error('invalid-user');
-				}
+				throw new Error('invalid-user');
 			}
 
 			const existingMember = await this.TeamMembersModel.findOneByUserIdAndTeamId(member.userId, team._id);
@@ -585,6 +574,8 @@ export class TeamService extends ServiceClass implements ITeamService {
 
 			await this.unsubscribeFromMain(team.roomId, member.userId);
 		}
+
+		return true;
 	}
 
 	async addMember(inviter: IUser, userId: string, teamId: string): Promise<boolean> {
@@ -594,7 +585,12 @@ export class TeamService extends ServiceClass implements ITeamService {
 			return false;
 		}
 
-		const member = (await this.TeamMembersModel.createOneByTeamIdAndUserId(teamId, userId, { _id: inviter._id, username: inviter.username })).ops[0];
+		let inviterData = {} as Pick<IUser, '_id' | 'username'>;
+		if (inviter) {
+			inviterData = { _id: inviter._id, username: inviter.username };
+		}
+
+		const member = (await this.TeamMembersModel.createOneByTeamIdAndUserId(teamId, userId, inviterData)).ops[0];
 		await this.addMembersToDefaultRooms(inviter, teamId, [member]);
 
 		return true;
@@ -679,6 +675,10 @@ export class TeamService extends ServiceClass implements ITeamService {
 
 	async deleteByName(teamName: string): Promise<boolean> {
 		return !!await this.TeamModel.deleteOneByName(teamName);
+	}
+
+	async getAllPublicTeams(options: FindOneOptions<ITeam>): Promise<Array<ITeam>> {
+		return this.TeamModel.findByType(TEAM_TYPE.PUBLIC, options).toArray();
 	}
 
 	async getStatistics(): Promise<ITeamStats> {
