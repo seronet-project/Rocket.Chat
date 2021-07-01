@@ -63,7 +63,7 @@ jobs:
         path: |
           ./node_modules
           ./ee/server/services/node_modules
-        key: ${{ runner.OS }}-node_modules-2-${{ hashFiles('**/package-lock.json', '.github/workflows/build_and_test.yml') }}
+        key: ${{ runner.OS }}-node_modules-4-${{ hashFiles('**/package-lock.json', '.github/workflows/build_and_test.yml') }}
 
     - name: Cache cypress
       id: cache-cypress
@@ -249,7 +249,7 @@ jobs:
         path: |
           ./node_modules
           ./ee/server/services/node_modules
-        key: ${{ runner.OS }}-node_modules-2-${{ hashFiles('**/package-lock.json', '.github/workflows/build_and_test.yml') }}
+        key: ${{ runner.OS }}-node_modules-4-${{ hashFiles('**/package-lock.json', '.github/workflows/build_and_test.yml') }}
 
     - name: Cache cypress
       id: cache-cypress
@@ -320,7 +320,7 @@ jobs:
         path: |
           ./node_modules
           ./ee/server/services/node_modules
-        key: ${{ runner.OS }}-node_modules-2-${{ hashFiles('**/package-lock.json', '.github/workflows/build_and_test.yml') }}
+        key: ${{ runner.OS }}-node_modules-4-${{ hashFiles('**/package-lock.json', '.github/workflows/build_and_test.yml') }}
 
     - name: Cache meteor local
       uses: actions/cache@v2
